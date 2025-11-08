@@ -1,152 +1,94 @@
-# SAE4.Cyber.01 – Sécuriser un système d’information
+# SAE4.Cyber.01 – Sécurisation d’un système d’information
 
-Projet réalisé dans le cadre de la SAE4.Cyber.01 : **maquette de réseau d’entreprise sécurisée** répartie sur deux sites distants, avec tunnel sécurisé et services critiques durcis (DNS, Web).
-
-## 🎯 Objectifs du projet
-
-- Concevoir et configurer une **infrastructure réseau d’entreprise** sur deux sites :
-  - Siège
-  - Succursale
-- Séparer les usages via :
-  - 3 VLAN par site : `Service` / `Production` / `Admin`
-  - 1 DMZ par site
-- Mettre en place un **tunnel IPsec GRE sécurisé** entre les deux sites.
-- Sécuriser :
-  - le **DNS interne** (DNSSEC + DNS over TLS)
-  - un **serveur web HTTPS** (Nginx + PHP + MariaDB)
-  - les accès via **pare-feux, ACL, NAT, ANSSI**, etc.
-- Tester la sécurité et documenter les configurations dans un **Write-Up détaillé**.
+Projet réalisé dans le cadre de la SAE4.Cyber.01 du BUT Réseaux & Télécommunications – Semestre 4.  
+Objectif : concevoir, configurer et sécuriser une maquette réseau d’entreprise répartie sur deux sites distants, intégrant un tunnel sécurisé et des services critiques durcis.
 
 ---
 
-## 🏗️ Architecture globale
+## 🎯 Objectifs
 
-- Deux sites distants reliés par un réseau « Internet » (VLAN 800 dans la consigne).
-- Par site :
-  - Un **routeur principal**
-  - Un **firewall ASA** vers Internet / tunnel
-  - Un **switch L3** pour l’inter-VLAN
-  - Une **DMZ** (serveur web / mail, etc.)
-  - Trois réseaux LAN :
-    - `Service`
-    - `Production`
-    - `Admin` (a accès à tous les autres réseaux, y compris le site distant)
-- Entre les deux sites :
-  - **Tunnel GRE encapsulé dans IPsec**
-  - Routage dynamique via OSPF
-  - NAT + ACL pour contrôler et filtrer les flux
-
----
-
-## 🔐 Sécurisation mise en place
-
-### 1. DNS interne sécurisé (Windows Server 2019)
-
-- Serveur DNS avec zone interne `societeDDLS.pepiniere.rt`
-- Activation de **DNSSEC** :
-  - Génération de la KSK et ZSK
-  - Signature de la zone
-  - Activation des réponses sécurisées
-- Mise en place de **DNS over TLS (DoT)** via *stunnel* :
-  - Ecoute sur le port 853
-  - Tunnel TLS vers le port 53 local
-- Protection avancée :
-  - Limitation des requêtes DNS (anti-amplification / anti-DDoS)
-  - Blocage des requêtes `ANY`
-  - Restriction aux IP internes
-  - Journalisation et supervision des logs
-
-➡️ Tous les détails sont dans la section **« Configuration DNSSEC et DoT – Windows Serveur 2019 »** du write-up.
+- Concevoir une architecture réseau complète sur deux sites :
+  - **Siège**
+  - **Succursale**
+- Mettre en place :
+  - Un **tunnel IPsec GRE** entre les deux sites
+  - Trois **VLAN par site** (`Service`, `Production`, `Admin`)
+  - Une **DMZ** par site
+- Sécuriser les services principaux :
+  - **DNS interne** (DNSSEC + DNS over TLS)
+  - **Serveur Web HTTPS** (Nginx + PHP + MariaDB)
+- Appliquer les bonnes pratiques de sécurité :
+  - Pare-feux ASA, ACL, NAT
+  - Conformité aux recommandations de l’**ANSSI**
+- Documenter l’ensemble du projet dans un **rapport technique (write-up)**.
 
 ---
 
-### 2. Serveur Web sécurisé (Nginx + PHP + MariaDB)
+## 🧩 Architecture réseau
 
-- OS : Ubuntu / Debian
-- Installation de :
-  - `nginx`
-  - `php-fpm`
-  - `mariadb-server`
-- Génération d’un **certificat SSL auto-signé**.
-- Configuration Nginx :
-  - Forçage **HTTPS** (redirection HTTP → HTTPS)
-  - Protocoles et suites de chiffrement conformes aux recommandations **ANSSI**
-  - En-têtes de sécurité :
-    - HSTS
-    - X-Frame-Options
-    - X-Content-Type-Options
-    - X-XSS-Protection
-    - Content-Security-Policy
-  - Désactivation de la compression sur les pages sensibles
-- Application web :
-  - Formulaire de **connexion sécurisée (PHP)** avec :
-    - Hash de mot de passe (`password_hash`)
-    - Protection CSRF
-    - Session sécurisée (`cookie_secure`, `httponly`)
-  - Connexion à MariaDB via **SSL** (PDO + SSL_CA).
-- Base de données :
-  - Utilisateur applicatif à privilèges limités
-  - Compte admin DB séparé pour la maintenance
-- Pare-feu :
-  - `ufw` configuré pour n’autoriser que le nécessaire
-  - Limitation basique anti-DDoS via `limit_req` dans Nginx
+Chaque site comprend :
 
----
-
-### 3. Maquette réseau Cisco Packet Tracer
-
-Le projet inclut une maquette complète sous **Cisco Packet Tracer** :
-
-- **Segmentation réseau** par VLAN sur les switches L3 :
+- Un **routeur principal** connecté à un routeur “Internet”
+- Un **pare-feu ASA** (interface `inside`, `dmz`, `outside`)
+- Un **switch L3** pour l’inter-VLAN
+- Trois VLAN :
   - VLAN 10 : Service
   - VLAN 20 : Production
   - VLAN 30 : Admin
-- **Inter-VLAN routing** via interfaces `int vlan X` sur les L3.
-- **ACL** pour contrôler les flux entre VLAN :
-  - Admin peut accéder à tous les VLAN.
-  - Service / Production **ne peuvent pas** accéder aux VLAN Admin ni à certains réseaux distants.
-- **Firewall ASA** :
-  - Inspection du trafic (DNS, HTTP, ICMP…)
-  - Interfaces `inside` / `dmz` / `outside`
-  - NAT dynamique pour sorties vers l’extérieur
-- **Routeurs de site + routeur « Internet »** :
-  - Routage OSPF
-  - NAT
-  - Mise en place du **tunnel IPsec GRE** :
-    - IKE Phase 1 & 2 (AES, SHA, PSK, DH group 2)
-    - `crypto map`, `transform-set`, ACL intéressée GRE
-    - Interface `Tunnel0` / routes statiques vers les réseaux distants
+- Une **DMZ** pour les serveurs publics (web, DNS…)
 
-Les commandes complètes pour chaque équipement sont listées dans le **Write-Up**.
+Les deux sites sont reliés par un **tunnel GRE encapsulé dans IPsec**, permettant le routage OSPF entre eux et la communication sécurisée des sous-réseaux internes.
 
 ---
 
-### 4. Tests de sécurité
+## 🔐 Sécurisation des services
 
-- Découverte réseau :
-  - `netdiscover`
-  - `nmap -sS -A`
-- Exploitation de failles :
-  - Scan SMBv1 et vulnérabilité **MS17-010 (EternalBlue)**
-  - Exploitation via Metasploit (`msfconsole`)
-- Tests DNS :
-  - Vérification DNSSEC et DoT (`dig +dnssec +tls`, `Resolve-DnsName`)
-  - Tentatives d’attaques (ANY, amplification, spoofing avec Bettercap)
-- Validation des protections pare-feu, NAT, ACL et tunnel.
+### DNS interne (Windows Server 2019)
+
+- Zone interne : `societeDDLS.pepiniere.rt`
+- Configuration **DNSSEC** :
+  - Signature de zone (KSK/ZSK)
+  - Validation des réponses signées
+- Activation de **DNS over TLS (DoT)** via *stunnel*
+- Sécurisation :
+  - Blocage des requêtes `ANY`
+  - Limitation aux IP internes
+  - Journalisation et supervision
+
+### Serveur Web (Nginx + PHP + MariaDB)
+
+- Serveur HTTPS avec **certificat SSL** auto-signé
+- Application web sécurisée :
+  - Authentification PHP avec hash (`password_hash`)
+  - Protection CSRF et cookies sécurisés
+  - Connexion MariaDB via SSL
+- Configuration Nginx conforme ANSSI :
+  - Forçage HTTPS
+  - HSTS, CSP, XSS protection
+  - Filtrage des méthodes HTTP
+- Pare-feu `ufw` limitant les ports ouverts aux seuls nécessaires
 
 ---
 
-## 📁 Contenu du dépôt
+## 🧱 Technologies et outils utilisés
 
-Proposition d’arborescence :
+- **Cisco Packet Tracer** : conception du réseau et configuration Cisco  
+- **Windows Server 2019** : DNS interne, DNSSEC et DoT  
+- **Debian / Ubuntu Server** : serveur web et base de données  
+- **Kali Linux** : tests d’intrusion et validation de la sécurité  
+- **Nmap**, **Metasploit**, **Bettercap** : audit et vérification des protections  
+
+---
+
+## ⚙️ Contenu du dépôt
 
 ```text
 .
-├── README.md                       # Ce fichier
-├── writeup/
-│   └── Write-Up-SAE4-Cyber-01.pdf  # Rapport complet (config + explications)
+├── README.md
 ├── packettracer/
 │   ├── schema_final.pkt
-│   └── schema_final_sans_mdp.pkt   # Version sans mots de passe
+│   └── schema_final_sans_mdp.pkt
+├── writeup/
+│   └── Write-Up - SAE4.Cyber.01.pdf
 └── docs/
-    └── schema_reseau.png           # Schéma de l’énoncé (optionnel)
+    └── schema_reseau.png
